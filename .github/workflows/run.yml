@@ -12,19 +12,19 @@ jobs:
     runs-on: ubuntu-22.04
     environment: user
     steps:
-      # 1. 关键修复：弃用 actions/checkout，改用原生 git clone，彻底解决 git-lfs 3.6.0 Bug
+      # 1. 手动拉取代码（彻底解决 git-lfs 3.6.0 报错的问题）
       - name: Check out code
         run: |
           git clone --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
 
-      # 2. 配置 Node 环境（升级到 v4，修复 Node 16 提示）
+      # 2. 配置 Node.js 环境
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
 
-      # 3. 调试判断
+      # 3. 判断调试模式
       - name: Check if Debug is true
         if: vars.debug == '1'
         run: |
@@ -38,7 +38,7 @@ jobs:
           key: ${{ runner.os }}-cache-token
           restore-keys: ${{ runner.os }}-cache-token-
 
-      # 5. 关键修复：抛弃死掉的第三方插件，改用 GitHub 官方内置脚本注入环境变量
+      # 5. 注入私密环境变量（官方脚本法，不会引发特殊字符报错）
       - name: Init secrets
         uses: actions/github-script@v7
         with:
@@ -51,11 +51,18 @@ jobs:
             }
             fs.writeFileSync('.env', content);
 
-      # 6. 安装依赖
+      # 6. 【关键修复】提前配置好 Git 的身份信息，防止 npm start 运行 git 时报错
+      - name: Configure Git identity
+        run: |
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+
+      # 7. 安装依赖
       - name: Init dependencies
         run: npm install
 
-      # 7. 运行主程序
+      # 8. 运行主程序
       - name: Run
         uses: nick-fields/retry@v3
         with:
@@ -63,25 +70,22 @@ jobs:
           max_attempts: 3
           command: npm start
 
-      # 8. 保存缓存
+      # 9. 保存缓存
       - name: Save cached C...
         uses: actions/cache/save@v4
         with:
           path: token
           key: ${{ runner.os }}-cache-token-${{ hashFiles('token/**.json') }}
 
-      # 9. 保持运行（用于定时任务）
+      # 10. 用于定时任务的保活操作
       - name: Keep Running
         if: github.event_name == 'schedule'
         run: |
-          git config --local user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-          git config --local user.name "${{ github.actor }}"
-          git remote set-url origin https://${{ github.token }}@github.com/${{ github.repository }}
           git pull --rebase --autostash
           git commit --allow-empty -m "Keep Running..."
           git push
 
-      # 10. 清除旧的运行记录
+      # 11. 清理旧的工作流记录
       - name: Delete old workflow run
         uses: Mattraks/delete-workflow-runs@main
         with:
