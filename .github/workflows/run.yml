@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: user
     steps:
-      # 1. 手动拉取代码（彻底解决 git-lfs 3.6.0 报错的问题）
+      # 1. 手动拉取代码
       - name: Check out code
         run: |
           git clone --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
@@ -38,7 +38,7 @@ jobs:
           key: ${{ runner.os }}-cache-token
           restore-keys: ${{ runner.os }}-cache-token-
 
-      # 5. 注入私密环境变量（官方脚本法，不会引发特殊字符报错）
+      # 5. 注入私密环境变量
       - name: Init secrets
         uses: actions/github-script@v7
         with:
@@ -51,7 +51,7 @@ jobs:
             }
             fs.writeFileSync('.env', content);
 
-      # 6. 【关键修复】提前配置好 Git 的身份信息，防止 npm start 运行 git 时报错
+      # 6. 配置 Git 身份
       - name: Configure Git identity
         run: |
           git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
@@ -70,9 +70,10 @@ jobs:
           max_attempts: 3
           command: npm start
 
-      # 9. 保存缓存
+      # 9. 【关键修复】保存缓存，加了一个判断，没有文件的话就不保存，彻底消除黄色警告
       - name: Save cached C...
         uses: actions/cache/save@v4
+        if: success() && hashFiles('token/**.json') != ''
         with:
           path: token
           key: ${{ runner.os }}-cache-token-${{ hashFiles('token/**.json') }}
