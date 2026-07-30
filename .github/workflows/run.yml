@@ -5,31 +5,33 @@ on:
   watch:
     types: [ started ]
   schedule:
-    - cron: 35 2 * * * # Runs at 02:35
+    - cron: '35 2 * * *'
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-22.04
     environment: user
     steps:
-      # 1. 关键修复：改用 actions/checkout@v4，且加入 lfs: false 彻底绕过“下载 3.6.0”的报错
+      # 1. 拉取代码（加入 lfs: false 彻底屏蔽 git 3.6.0 报错）
       - name: Check out code
         uses: actions/checkout@v4
         with:
           lfs: false
 
-      # 2. 修复警告：升级 actions/setup-node 到 v4，解决 Node 16 过时提示
+      # 2. 配置 Node 环境（升级到 v4，修复 Node 16 警告）
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
 
+      # 3. 调试判断
       - name: Check if Debug is true
         if: vars.debug == '1'
         run: |
           echo "CLOUDCHECK_VERSION=${{ github.env }}" >> $GITHUB_ENV
 
+      # 4. 恢复缓存
       - name: Restore cached C...
         uses: actions/cache/restore@v4
         with:
@@ -37,14 +39,24 @@ jobs:
           key: ${{ runner.os }}-cache-token
           restore-keys: ${{ runner.os }}-cache-token-
 
+      # 5. 注入私密环境变量（【已修复】改用官方脚本，不再因符号报错）
       - name: Init secrets
-        run: |
-          echo "${{ toJSON(secrets) }}" | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> .env
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const secrets = ${{ toJSON(secrets) }};
+            const fs = require('fs');
+            let content = '';
+            for (const [key, value] of Object.entries(secrets)) {
+              content += `${key}=${value}\n`;
+            }
+            fs.writeFileSync('.env', content);
 
+      # 6. 安装依赖
       - name: Init dependencies
         run: npm install
 
-      # 3. 修复警告：升级 retry 到 v3，解决 Node 16 过时提示
+      # 7. 运行核心程序（升级到 retry@v3，修复 Node 16 警告）
       - name: Run
         uses: nick-fields/retry@v3
         with:
@@ -52,12 +64,14 @@ jobs:
           max_attempts: 3
           command: npm start
 
+      # 8. 保存缓存
       - name: Save cached C...
         uses: actions/cache/save@v4
         with:
           path: token
           key: ${{ runner.os }}-cache-token-${{ hashFiles('token/**.json') }}
 
+      # 9. 保持运行（用于定时任务）
       - name: Keep Running
         if: github.event_name == 'schedule'
         run: |
@@ -68,6 +82,7 @@ jobs:
           git commit --allow-empty -m "Keep Running..."
           git push
 
+      # 10. 清除旧的运行记录
       - name: Delete old workflow run
         uses: Mattraks/delete-workflow-runs@main
         with:
