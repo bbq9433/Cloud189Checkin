@@ -10,7 +10,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-22.04
-    environment: user
+    
     steps:
       # 1. 手动拉取代码
       - name: Check out code
