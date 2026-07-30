@@ -12,13 +12,12 @@ jobs:
     runs-on: ubuntu-22.04
     environment: user
     steps:
-      # 1. 拉取代码（加入 lfs: false 彻底屏蔽 git 3.6.0 报错）
+      # 1. 关键修复：弃用 actions/checkout，改用原生 git clone，彻底解决 git-lfs 3.6.0 Bug
       - name: Check out code
-        uses: actions/checkout@v4
-        with:
-          lfs: false
+        run: |
+          git clone --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
 
-      # 2. 配置 Node 环境（升级到 v4，修复 Node 16 警告）
+      # 2. 配置 Node 环境（升级到 v4，修复 Node 16 提示）
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
@@ -39,7 +38,7 @@ jobs:
           key: ${{ runner.os }}-cache-token
           restore-keys: ${{ runner.os }}-cache-token-
 
-      # 5. 注入私密环境变量（【已修复】改用官方脚本，不再因符号报错）
+      # 5. 关键修复：抛弃死掉的第三方插件，改用 GitHub 官方内置脚本注入环境变量
       - name: Init secrets
         uses: actions/github-script@v7
         with:
@@ -56,7 +55,7 @@ jobs:
       - name: Init dependencies
         run: npm install
 
-      # 7. 运行核心程序（升级到 retry@v3，修复 Node 16 警告）
+      # 7. 运行主程序
       - name: Run
         uses: nick-fields/retry@v3
         with:
